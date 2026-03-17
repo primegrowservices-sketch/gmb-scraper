@@ -1,27 +1,50 @@
 const express = require("express");
-const cors = require("cors");
+const puppeteer = require("puppeteer");
 
 const app = express();
-app.use(cors());
-
-app.get("/", (req, res) => {
-  res.send("API Working ✅");
-});
 
 app.get("/api/leads", async (req, res) => {
-  const keyword = req.query.keyword;
+  const keyword = req.query.keyword || "salon delhi";
 
-  // Fake dynamic logic (next step me real scraping)
-  let results = [];
-
-  for (let i = 1; i <= 10; i++) {
-    results.push({
-      name: keyword + " Business " + i,
-      phone: "9" + Math.floor(100000000 + Math.random() * 900000000)
+  try {
+    const browser = await puppeteer.launch({
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
-  }
 
-  res.json(results);
+    const page = await browser.newPage();
+
+    await page.goto(`https://www.google.com/maps/search/${keyword}`);
+
+    await page.waitForTimeout(5000);
+
+    // Scroll for more results
+    for (let i = 0; i < 5; i++) {
+      await page.mouse.wheel(0, 10000);
+      await page.waitForTimeout(3000);
+    }
+
+    const data = await page.evaluate(() => {
+      const results = [];
+      const items = document.querySelectorAll(".Nv2PK");
+
+      items.forEach((el) => {
+        const name = el.querySelector(".qBF1Pd")?.innerText;
+        const phone = el.innerText.match(/\d{10}/)?.[0];
+
+        if (name && phone) {
+          results.push({ name, phone });
+        }
+      });
+
+      return results;
+    });
+
+    await browser.close();
+
+    res.json(data);
+  } catch (err) {
+    res.json({ error: "Scraping failed", details: err.message });
+  }
 });
 
 app.listen(3000, () => console.log("Server running on port 3000"));
